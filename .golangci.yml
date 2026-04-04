@@ -1,0 +1,11 @@
+version: "2"
+
+linters:
+  enable:
+    - gosec     # OWASP-aligned: hardcoded secrets, weak crypto, SQL injection, unsafe blocks
+    - gocritic  # code smells: unused params, redundant expressions, style issues
+
+settings:
+  gosec:
+    excludes:
+      - G104  # unhandled errors — already covered by errcheck
