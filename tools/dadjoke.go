@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -38,7 +40,7 @@ func addDadJokeWithClient(s *server.MCPServer, client *http.Client) {
 		}
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
-				fmt.Printf("failed to close response body: %v\n", err)
+				fmt.Fprintln(os.Stderr, "failed to close response body:", err)
 			}
 		}()
 
@@ -56,5 +58,5 @@ func addDadJokeWithClient(s *server.MCPServer, client *http.Client) {
 }
 
 func AddDadJoke(s *server.MCPServer) {
-	addDadJokeWithClient(s, http.DefaultClient)
+	addDadJokeWithClient(s, &http.Client{Timeout: 10 * time.Second})
 }

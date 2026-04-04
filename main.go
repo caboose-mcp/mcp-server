@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"mcp-server/tools"
 
@@ -10,7 +11,7 @@ import (
 
 func main() {
 	s := server.NewMCPServer(
-		"Calculator Demo",
+		"mcp-server",
 		"0.0.1",
 		server.WithToolCapabilities(false),
 		server.WithRecovery(),
@@ -20,6 +21,6 @@ func main() {
 	tools.AddDadJoke(s)
 
 	if err := server.ServeStdio(s); err != nil {
-		fmt.Printf("server error: %v\n", err)
+		fmt.Fprintln(os.Stderr, "server error:", err)
 	}
 }

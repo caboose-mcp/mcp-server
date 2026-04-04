@@ -55,6 +55,8 @@ func AddCalculator(s *server.MCPServer) {
 				return mcp.NewToolResultError("cannot divide by zero"), nil
 			}
 			result = x / y
+		default:
+			return mcp.NewToolResultError(fmt.Sprintf("unknown operation: %s", op)), nil
 		}
 
 		return mcp.NewToolResultText(fmt.Sprintf("%.2f", result)), nil

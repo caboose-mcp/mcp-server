@@ -8,7 +8,7 @@ MCP is a JSON-RPC 2.0 protocol that lets AI clients like Claude call typed tools
 
 ## Prerequisites
 
-- **Go 1.24+** — `go version`
+- **Go 1.26.1+** — `go version`
 - **mise** — pins `golangci-lint` and `lefthook` versions from `mise.toml`. Install from [mise.jdx.dev](https://mise.jdx.dev/getting-started.html).
 
 ---
@@ -90,7 +90,7 @@ Also runs automatically on `git push` via lefthook.
 
 ```go
 s := server.NewMCPServer(
-    "mcp-server",    // update this from the current "Calculator Demo"
+    "mcp-server",
     "0.0.1",
     server.WithToolCapabilities(false),
     server.WithRecovery(), // catches panics in handlers, returns error instead of crashing
