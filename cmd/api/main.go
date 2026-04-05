@@ -6,7 +6,9 @@
 //
 //	swag init -g cmd/api/main.go -o cmd/api/docs
 //
-// The Swagger UI is available at http://localhost:8080/swagger/index.html
+// The Swagger UI is available at http://localhost:8080/swagger/index.html when
+// the server is started with SWAGGER_ENABLED=true. It is disabled by default to
+// avoid exposing API schema details in production (OWASP A05).
 package main
 
 import (
@@ -26,6 +28,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httprate"
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
@@ -43,6 +46,12 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
+	// Warn operators when running with insecure defaults so misconfigurations
+	// surface immediately in logs rather than silently in production.
+	if os.Getenv("DATABASE_URL") == "" {
+		logger.Warn("DATABASE_URL is not set; database connection will fail")
+	}
+
 	connectCtx, connectCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	pool, err := db.Connect(connectCtx, os.Getenv("DATABASE_URL"))
 	connectCancel()
@@ -52,8 +61,25 @@ func main() {
 	}
 
 	r := chi.NewRouter()
+
+	// RequestID and RealIP must come first so that all subsequent middleware
+	// and handlers see the correct request ID and client IP.
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+
+	// OWASP A05: set defensive HTTP response headers on every response.
+	r.Use(handler.SecurityHeaders)
+
+	// OWASP A09: emit a structured log line for every request, including
+	// status code (for 4xx/5xx detection) and request ID for correlation.
+	r.Use(handler.RequestLogger(logger))
+
+	// OWASP A01: per-IP rate limiting — 60 requests per minute across all
+	// endpoints. Adjust via RATE_LIMIT_RPM if higher throughput is needed
+	// for JMeter runs (set to 0 to disable).
+	rpm := 60
+	r.Use(httprate.LimitByIP(rpm, time.Minute))
+
 	r.Use(middleware.Recoverer)
 
 	// Operational endpoints.
@@ -66,11 +92,15 @@ func main() {
 		r.Get("/dad-joke", handler.DadJoke(logger))
 	})
 
-	// Swagger UI — served at /swagger/index.html.
-	// The underlying spec JSON is at /swagger/doc.json.
-	r.Get("/swagger/*", httpSwagger.Handler(
-		httpSwagger.URL("/swagger/doc.json"),
-	))
+	// OWASP A05: Swagger UI is disabled by default to avoid advertising API
+	// structure in production environments. Set SWAGGER_ENABLED=true to enable.
+	// The underlying spec JSON lives at /swagger/doc.json.
+	if envOr("SWAGGER_ENABLED", "false") == "true" {
+		r.Get("/swagger/*", httpSwagger.Handler(
+			httpSwagger.URL("/swagger/doc.json"),
+		))
+		logger.Info("swagger UI enabled", "url", "http://localhost:"+envOr("PORT", "8080")+"/swagger/index.html")
+	}
 
 	addr := ":" + envOr("PORT", "8080")
 	srv := &http.Server{
@@ -83,7 +113,7 @@ func main() {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		logger.Info("api listening", "addr", addr, "swagger", "http://localhost"+addr+"/swagger/index.html")
+		logger.Info("api listening", "addr", addr)
 		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}

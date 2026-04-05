@@ -2,10 +2,13 @@ version: "2"
 
 linters:
   enable:
-    - gosec     # OWASP-aligned: hardcoded secrets, weak crypto, SQL injection, unsafe blocks
-    - gocritic  # code smells: unused params, redundant expressions, style issues
+    - gosec # OWASP-aligned: hardcoded secrets, weak crypto, SQL injection, unsafe blocks
+    - gocritic # code smells: unused params, redundant expressions, style issues
+    - bodyclose # OWASP A06: ensures HTTP response bodies are always closed, preventing resource leaks
+    - noctx # OWASP A06: ensures http.NewRequest calls always receive a context for cancellation propagation
+    - errcheck # ensures all returned errors are handled; complements gosec's G104 exclusion below
 
 settings:
   gosec:
     excludes:
-      - G104  # unhandled errors — already covered by errcheck
+      - G104 # unhandled errors — already covered by errcheck above

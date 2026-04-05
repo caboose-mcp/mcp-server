@@ -5,9 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"time"
 )
+
+// maxRequestBodyBytes is the hard cap on the size of any incoming request body.
+// This mitigates OWASP A04 (Insecure Design) / denial-of-service via large
+// payloads. 8 KB is far more than any legitimate calculate request needs.
+const maxRequestBodyBytes = 8 * 1024
 
 // CalculateRequest is the request body for the calculate endpoint.
 type CalculateRequest struct {
@@ -41,9 +47,21 @@ type DadJokeResponse struct {
 //	@Router			/tools/calculate [post]
 func Calculate(logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// OWASP A04: cap the request body to prevent DoS via huge payloads.
+		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+
 		var req CalculateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, logger, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
+			return
+		}
+
+		// OWASP A03: reject non-finite floats (±Inf, NaN). Go's JSON decoder
+		// rejects NaN/Inf literals, but an explicit check guards against any
+		// future parser permissiveness or unusual encoding paths.
+		if math.IsNaN(req.X) || math.IsInf(req.X, 0) ||
+			math.IsNaN(req.Y) || math.IsInf(req.Y, 0) {
+			writeJSON(w, logger, http.StatusBadRequest, ErrorResponse{Error: "x and y must be finite numbers"})
 			return
 		}
 
