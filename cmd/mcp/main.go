@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	"mcp-server/tools"
 
@@ -21,6 +20,6 @@ func main() {
 	tools.AddDadJoke(s)
 
 	if err := server.ServeStdio(s); err != nil {
-		fmt.Fprintln(os.Stderr, "server error:", err)
+		fmt.Printf("server error: %v\n", err)
 	}
 }
