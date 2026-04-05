@@ -1,0 +1,122 @@
+basePath: /
+definitions:
+  handler.CalculateRequest:
+    properties:
+      operation:
+        example: add
+        type: string
+      x:
+        example: 10
+        type: number
+      "y":
+        example: 5
+        type: number
+    type: object
+  handler.CalculateResponse:
+    properties:
+      result:
+        example: 15
+        type: number
+    type: object
+  handler.DadJokeResponse:
+    properties:
+      id:
+        example: R7UfaahVfFd
+        type: string
+      joke:
+        example: Why do cows wear bells? Because their horns don't work.
+        type: string
+    type: object
+  handler.ErrorResponse:
+    properties:
+      error:
+        example: database unreachable
+        type: string
+    type: object
+  handler.HealthResponse:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: MCP Server
+  description: REST interface for the MCP server tools (calculator, dad jokes) and
+    operational endpoints. Intended for use with JMeter load testing.
+  license:
+    name: MIT
+  title: MCP Server REST API
+  version: "1.0"
+paths:
+  /health:
+    get:
+      description: Returns 200 if the service is healthy and the database is reachable.
+        Returns 503 if the database ping fails.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.HealthResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: Health check
+      tags:
+      - ops
+  /tools/calculate:
+    post:
+      consumes:
+      - application/json
+      description: Performs add, subtract, multiply, or divide on two numbers. Division
+        by zero returns 422.
+      parameters:
+      - description: Operands and operation
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CalculateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.CalculateResponse'
+        "400":
+          description: Invalid request body or unknown operation
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+        "422":
+          description: Division by zero
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: Calculate a math expression
+      tags:
+      - tools
+  /tools/dad-joke:
+    get:
+      description: Proxies a request to icanhazdadjoke.com and returns the joke and
+        its upstream ID.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.DadJokeResponse'
+        "502":
+          description: Upstream request failed
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: Get a random dad joke
+      tags:
+      - tools
+schemes:
+- http
+swagger: "2.0"
