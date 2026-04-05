@@ -1,0 +1,178 @@
+{
+    "schemes": [
+        "http"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "REST interface for the MCP server tools (calculator, dad jokes) and operational endpoints. Intended for use with JMeter load testing.",
+        "title": "MCP Server REST API",
+        "contact": {
+            "name": "MCP Server"
+        },
+        "license": {
+            "name": "MIT"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/",
+    "paths": {
+        "/health": {
+            "get": {
+                "description": "Returns 200 if the service is healthy and the database is reachable. Returns 503 if the database ping fails.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ops"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.HealthResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/handler.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tools/calculate": {
+            "post": {
+                "description": "Performs add, subtract, multiply, or divide on two numbers. Division by zero returns 422.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tools"
+                ],
+                "summary": "Calculate a math expression",
+                "parameters": [
+                    {
+                        "description": "Operands and operation",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.CalculateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.CalculateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request body or unknown operation",
+                        "schema": {
+                            "$ref": "#/definitions/handler.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Division by zero",
+                        "schema": {
+                            "$ref": "#/definitions/handler.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tools/dad-joke": {
+            "get": {
+                "description": "Proxies a request to icanhazdadjoke.com and returns the joke and its upstream ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tools"
+                ],
+                "summary": "Get a random dad joke",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.DadJokeResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Upstream request failed",
+                        "schema": {
+                            "$ref": "#/definitions/handler.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "handler.CalculateRequest": {
+            "type": "object",
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "example": "add"
+                },
+                "x": {
+                    "type": "number",
+                    "example": 10
+                },
+                "y": {
+                    "type": "number",
+                    "example": 5
+                }
+            }
+        },
+        "handler.CalculateResponse": {
+            "type": "object",
+            "properties": {
+                "result": {
+                    "type": "number",
+                    "example": 15
+                }
+            }
+        },
+        "handler.DadJokeResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "example": "R7UfaahVfFd"
+                },
+                "joke": {
+                    "type": "string",
+                    "example": "Why do cows wear bells? Because their horns don't work."
+                }
+            }
+        },
+        "handler.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "database unreachable"
+                }
+            }
+        },
+        "handler.HealthResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        }
+    }
+}
