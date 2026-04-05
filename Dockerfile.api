@@ -4,11 +4,12 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /api ./cmd/api
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /healthcheck ./cmd/healthcheck
 
 # distroless/static-debian12 ships a built-in "nonroot" user (uid 65532).
 # Using it satisfies OWASP A02 (principle of least privilege): the process
 # cannot write to the filesystem, escalate privileges, or install packages.
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=builder /api /api
-USER nonroot:nonroot
+COPY --from=builder /healthcheck /healthcheck
 ENTRYPOINT ["/api"]

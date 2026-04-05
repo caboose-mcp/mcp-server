@@ -33,3 +33,8 @@ go.work.sum
 .claude
 
 mcp-server
+healthcheck
+
+# JMeter results (generated at runtime)
+jmeter/results/*
+!jmeter/results/.gitkeep
