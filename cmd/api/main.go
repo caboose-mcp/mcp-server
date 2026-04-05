@@ -78,7 +78,7 @@ func main() {
 	// disable rate limiting entirely (useful for JMeter load tests).
 	rpm, rpmErr := strconv.Atoi(envOr("RATE_LIMIT_RPM", "60"))
 	if rpmErr != nil || rpm < 0 {
-		logger.Warn("invalid RATE_LIMIT_RPM value; defaulting to 60")
+		logger.Warn("invalid RATE_LIMIT_RPM value; defaulting to 60", "value", envOr("RATE_LIMIT_RPM", "60"))
 		rpm = 60
 	}
 	if rpm > 0 {
@@ -183,6 +183,8 @@ func dsnFromEnv() string {
 	dbName := os.Getenv("POSTGRES_DB")
 
 	if user == "" || dbName == "" {
+		// Caller (main) checks for empty DSN and logs a warning before
+		// attempting to connect, so returning "" here is intentional.
 		return ""
 	}
 
