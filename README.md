@@ -40,18 +40,38 @@ cp .env.example .env  # copy and edit environment variables
 
 ## Running locally
 
-**API + Postgres via Docker Compose:**
+### Option 1 — Everything via Docker Compose
+
 ```sh
 docker compose up
 ```
 
-The API will be available at `http://localhost:8080`. Postgres is exposed on `localhost:5432`.
+API available at `http://localhost:8080`. Postgres on `localhost:5432`.
 
-**MCP server (for manual testing):**
+### Option 2 — Compose for Postgres only, API with `go run`
+
+Useful when actively developing the API — faster iteration than rebuilding the image on every change.
+
+```sh
+# Start only Postgres
+docker compose up postgres
+
+# In another terminal, run the API directly
+DATABASE_URL=postgres://dev:dev@localhost:5432/dev go run ./cmd/api
+```
+
+Or add `DATABASE_URL` to your `.env` and export it:
+
+```sh
+export DATABASE_URL=postgres://dev:dev@localhost:5432/dev
+go run ./cmd/api
+```
+
+**MCP server:**
 ```sh
 go run ./cmd/mcp
 ```
-It blocks on stdin — that's expected. In normal use Claude Desktop launches it; you don't run it directly.
+Blocks on stdin — expected. In normal use Claude Desktop launches it as a subprocess.
 
 ---
 
