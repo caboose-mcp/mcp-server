@@ -20,7 +20,9 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	pool, err := db.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	connectCtx, connectCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer connectCancel()
+	pool, err := db.Connect(connectCtx, os.Getenv("DATABASE_URL"))
 	if err != nil {
 		logger.Error("failed to connect to database", "error", err)
 		os.Exit(1)
@@ -36,9 +38,8 @@ func main() {
 			http.Error(w, "database unreachable", http.StatusServiceUnavailable)
 			return
 		}
-		w.WriteHeader(http.StatusOK)
 		if _, err := fmt.Fprintln(w, "ok"); err != nil {
-			http.Error(w, "failed to write response", http.StatusInternalServerError)
+			logger.Error("failed to write health response", "error", err)
 		}
 	})
 

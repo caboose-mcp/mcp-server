@@ -1,3 +1,3 @@
 [tools]
-golangci-lint = "2"
-lefthook = "latest"
+golangci-lint = "2.0.0"
+lefthook = "1.7.18"
