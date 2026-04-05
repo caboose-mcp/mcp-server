@@ -1,3 +1,6 @@
+// Package main is the entry point for the REST API service.
+// It wires up the chi router, connects to Postgres via the shared internal/db
+// package, and serves HTTP with graceful shutdown on SIGINT/SIGTERM.
 package main
 
 import (
@@ -81,6 +84,7 @@ func main() {
 	logger.Info("shutdown complete")
 }
 
+// envOr returns the value of the environment variable key, or fallback if unset or empty.
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

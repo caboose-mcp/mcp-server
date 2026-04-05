@@ -1,15 +1,25 @@
 # mcp-server
 
-An MCP (Model Context Protocol) server written in Go. Ships two example tools — `calculate` and `dad_joke` — covering the two most common patterns: pure logic and an outbound HTTP call.
+A monorepo containing two services: an MCP server and a REST API, sharing a common Postgres database.
 
-MCP is a JSON-RPC 2.0 protocol that lets AI clients like Claude call typed tools in an external process. The stdio transport is deliberate: the client spawns your server as a child process and pipes JSON over stdin/stdout. No ports, no auth, no network exposure.
+MCP (Model Context Protocol) is a JSON-RPC 2.0 protocol for exposing typed tools to AI clients like Claude. The MCP server uses stdio transport — Claude Desktop spawns it as a child process and communicates over stdin/stdout. No ports, no auth, no network exposure.
+
+---
+
+## Services
+
+| Service | Entry point | Transport |
+|---------|-------------|-----------|
+| MCP server | `cmd/mcp` | stdio (spawned by Claude Desktop) |
+| REST API | `cmd/api` | HTTP on `PORT` (default `8080`) |
 
 ---
 
 ## Prerequisites
 
-- **Go 1.26.1+** — `go version`
-- **mise** — pins `golangci-lint` and `lefthook` versions from `mise.toml`. Install from [mise.jdx.dev](https://mise.jdx.dev/getting-started.html).
+- **Go 1.26.1+**
+- **mise** — manages `golangci-lint` and `lefthook` at pinned versions. Install from [mise.jdx.dev](https://mise.jdx.dev/getting-started.html).
+- **Docker + Docker Compose** — for running the API and Postgres locally.
 
 ---
 
@@ -17,23 +27,45 @@ MCP is a JSON-RPC 2.0 protocol that lets AI clients like Claude call typed tools
 
 ```sh
 mise install          # installs golangci-lint + lefthook at pinned versions
-go mod tidy           # fetches dependencies into the module cache
+go mod tidy           # fetches Go dependencies
 lefthook install      # wires git hooks from lefthook.yml
+cp .env.example .env  # copy and edit environment variables
 ```
 
-**Git hooks (lefthook.yml):**
+**Git hooks (`lefthook.yml`):**
 - `pre-commit` — runs `go fmt`, `go vet`, `golangci-lint` in parallel; blocks commit on failure
 - `pre-push` — runs `go test ./...`
 
 ---
 
-## Running the server
+## Running locally
 
+**API + Postgres via Docker Compose:**
 ```sh
-go run main.go
+docker compose up
 ```
 
-It blocks on stdin — that's correct. MCP clients communicate by piping JSON to the process; stray stdout would corrupt the stream. You normally don't run this directly; Claude Desktop launches it as a subprocess.
+The API will be available at `http://localhost:8080`. Postgres is exposed on `localhost:5432`.
+
+**MCP server (for manual testing):**
+```sh
+go run ./cmd/mcp
+```
+It blocks on stdin — that's expected. In normal use Claude Desktop launches it; you don't run it directly.
+
+---
+
+## Environment variables
+
+Defined in `.env` (copy from `.env.example`):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POSTGRES_USER` | `dev` | Postgres username |
+| `POSTGRES_PASSWORD` | `dev` | Postgres password |
+| `POSTGRES_DB` | `dev` | Postgres database name |
+| `DATABASE_URL` | — | Full DSN, set automatically by Compose for the API container |
+| `PORT` | `8080` | Port the REST API listens on |
 
 ---
 
@@ -44,27 +76,42 @@ It blocks on stdin — that's correct. MCP clients communicate by piping JSON to
 | macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | Linux | `~/.config/Claude/claude_desktop_config.json` |
 
-**Via `go run` (easiest to iterate):**
+**Via `go run` (easiest during development):**
 ```json
 {
   "mcpServers": {
     "mcp-server": {
       "command": "go",
-      "args": ["run", "/absolute/path/to/mcp-server/main.go"]
+      "args": ["run", "/absolute/path/to/mcp-server/cmd/mcp"]
     }
   }
 }
 ```
 
-**Via compiled binary (faster startup):**
+**Via compiled binary:**
 ```sh
-go build -o mcp-server-bin .
+go build -o mcp-server-bin ./cmd/mcp
 ```
 ```json
 {
   "mcpServers": {
     "mcp-server": {
       "command": "/absolute/path/to/mcp-server/mcp-server-bin"
+    }
+  }
+}
+```
+
+**Via Docker:**
+```sh
+docker build -f Dockerfile.mcp -t mcp-server-mcp .
+```
+```json
+{
+  "mcpServers": {
+    "mcp-server": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "mcp-server-mcp"]
     }
   }
 }
@@ -86,14 +133,14 @@ Also runs automatically on `git push` via lefthook.
 
 ## How tool registration works
 
-`main.go` wires everything up before handing off to `ServeStdio`:
+`cmd/mcp/main.go` wires everything up before handing off to `ServeStdio`:
 
 ```go
 s := server.NewMCPServer(
     "mcp-server",
     "0.0.1",
     server.WithToolCapabilities(false),
-    server.WithRecovery(), // catches panics in handlers, returns error instead of crashing
+    server.WithRecovery(), // catches panics in handlers, returns error result instead of crashing
 )
 
 tools.AddCalculator(s)
@@ -109,7 +156,6 @@ Each tool lives in `tools/` and exposes a single `AddXxx(s *server.MCPServer)` f
 ## Adding a new tool
 
 **`tools/greet.go`:**
-
 ```go
 package tools
 
@@ -137,19 +183,18 @@ func AddGreet(s *server.MCPServer) {
 }
 ```
 
-Then in `main.go`:
-
+Then in `cmd/mcp/main.go`:
 ```go
 tools.AddGreet(s)
 ```
 
 **Go-specific things worth knowing:**
 
-- **Errors are values.** The handler signature is `func(...) (*mcp.CallToolResult, error)`. The `error` return is for unexpected, unrecoverable failures (framework-level). Tool-level failures — bad input, API errors, divide-by-zero — go into `mcp.NewToolResultError(msg)` with a `nil` error return. This surfaces the failure to the AI as a readable message rather than killing the request.
+- **Errors are values.** The handler returns `(*mcp.CallToolResult, error)`. The `error` return is for framework-level failures. Tool-level failures — bad input, API errors, divide-by-zero — go into `mcp.NewToolResultError(msg)` with a `nil` error return. This surfaces the failure to the AI as a readable message rather than killing the request.
 
-- **`http.RoundTripper` is the HTTP mock seam.** No mock library needed. Pass an `*http.Client` as a parameter to your internal registration function (see `addDadJokeWithClient` in `dadjoke.go`). In tests, supply a client whose `Transport` is a `roundTripFunc` that redirects to an `httptest.Server`. Production code calls the public `AddDadJoke` wrapper which passes `http.DefaultClient`.
+- **`http.RoundTripper` is the HTTP mock seam.** No mock library needed. Pass an `*http.Client` into your internal registration function (see `addDadJokeWithClient` in `tools/dadjoke.go`). In tests, supply a client whose `Transport` redirects to an `httptest.Server`. The public `AddDadJoke` wrapper passes `http.DefaultClient`.
 
-- **`_test.go` files in the same package see unexported identifiers.** Tests in `tools/` use `package tools` (not `package tools_test`) so they can call `addDadJokeWithClient` directly and inject the mock client. If you need to test internal helpers, keep the test file in the same package.
+- **`_test.go` files in the same package see unexported identifiers.** Tests in `tools/` use `package tools` (not `package tools_test`) so they can call `addDadJokeWithClient` directly to inject the mock client.
 
 ---
 
@@ -157,23 +202,41 @@ tools.AddGreet(s)
 
 ```
 mcp-server/
-├── main.go                  # Server init + tool registration + ServeStdio
+├── cmd/
+│   ├── mcp/
+│   │   └── main.go          # MCP server: init, tool registration, ServeStdio
+│   └── api/
+│       └── main.go          # REST API: chi router, graceful shutdown, DB wiring
+├── internal/
+│   └── db/
+│       └── db.go            # pgxpool connection helper, shared by both services
 ├── tools/
 │   ├── calculator.go        # Pure arithmetic; reference for enum-constrained args
 │   ├── calculator_test.go
-│   ├── dadjoke.go           # HTTP call; reference for RoundTripper injection pattern
+│   ├── dadjoke.go           # Outbound HTTP; reference for RoundTripper injection pattern
 │   └── dadjoke_test.go
-├── go.mod                   # Module: "mcp-server", go 1.26, mcp-go v0.47.0
+├── Dockerfile.mcp           # Multi-stage build → scratch image (~5MB)
+├── Dockerfile.api           # Multi-stage build → distroless image
+├── docker-compose.yml       # postgres + api
+├── .env.example             # Copy to .env for local development
+├── .golangci.yml            # Enables gosec (OWASP) and gocritic on top of defaults
+├── go.mod                   # Module: "mcp-server", go 1.26.1, mcp-go v0.47.0
 ├── go.sum
-├── mise.toml                # Pins golangci-lint + lefthook versions
-└── lefthook.yml             # pre-commit: fmt/vet/lint || pre-push: test
+├── mise.toml                # Pins golangci-lint and lefthook to exact versions
+└── lefthook.yml             # pre-commit: fmt/vet/lint in parallel | pre-push: test
 ```
 
 ---
 
-## Tools reference
+## MCP tools reference
 
 | Tool | Arguments | Returns |
 |------|-----------|---------|
-| `calculate` | `operation` (string, one of `add`/`subtract`/`multiply`/`divide`), `x` (number), `y` (number) | Result formatted to 2 decimal places, e.g. `"25.00"`. Error on divide-by-zero. |
-| `dad_joke` | none | A random joke string from [icanhazdadjoke.com](https://icanhazdadjoke.com). No API key required. Error on network failure or non-200 response. |
+| `calculate` | `operation` (enum: `add`/`subtract`/`multiply`/`divide`), `x` (number), `y` (number) | Result to 2 decimal places. Error on divide-by-zero. |
+| `dad_joke` | none | Random joke from [icanhazdadjoke.com](https://icanhazdadjoke.com). No API key required. Error on network failure or non-200 response. |
+
+## REST API reference
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Returns `200 ok` if the server is up and Postgres is reachable; `503` otherwise. |
