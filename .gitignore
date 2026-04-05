@@ -33,3 +33,7 @@ go.work.sum
 .claude
 
 mcp-server
+
+# JMeter results (generated at runtime)
+jmeter/results/*
+!jmeter/results/.gitkeep
