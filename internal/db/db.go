@@ -1,3 +1,5 @@
+// Package db provides a shared Postgres connection pool for use across services.
+// It wraps pgxpool and enforces a startup ping so misconfigured DSNs fail fast.
 package db
 
 import (
