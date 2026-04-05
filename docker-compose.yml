@@ -30,5 +30,22 @@ services:
       postgres:
         condition: service_healthy
 
+  jmeter:
+    image: justb4/jmeter:5.6.3
+    profiles:
+      - load-test
+    depends_on:
+      - api
+    volumes:
+      - ./jmeter/tests:/tests
+      - ./jmeter/results:/results
+    command: >
+      -n
+      -t /tests/health-check.jmx
+      -l /results/results.jtl
+      -e
+      -o /results/report
+    restart: "no"
+
 volumes:
   postgres_data:
