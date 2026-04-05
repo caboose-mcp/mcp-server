@@ -21,8 +21,8 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	connectCtx, connectCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer connectCancel()
 	pool, err := db.Connect(connectCtx, os.Getenv("DATABASE_URL"))
+	connectCancel()
 	if err != nil {
 		logger.Error("failed to connect to database", "error", err)
 		os.Exit(1)
