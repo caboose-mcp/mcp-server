@@ -15,9 +15,12 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -46,14 +49,15 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	// Warn operators when running with insecure defaults so misconfigurations
-	// surface immediately in logs rather than silently in production.
-	if os.Getenv("DATABASE_URL") == "" {
-		logger.Warn("DATABASE_URL is not set; database connection will fail")
+	// Build the database DSN from environment variables, warning if no
+	// credentials are configured so misconfigurations surface early.
+	dsn := dsnFromEnv()
+	if dsn == "" {
+		logger.Warn("no database credentials set; database connection will fail")
 	}
 
 	connectCtx, connectCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	pool, err := db.Connect(connectCtx, os.Getenv("DATABASE_URL"))
+	pool, err := db.Connect(connectCtx, dsn)
 	connectCancel()
 	if err != nil {
 		logger.Error("failed to connect to database", "error", err)
@@ -62,9 +66,27 @@ func main() {
 
 	r := chi.NewRouter()
 
-	// RequestID and RealIP must come first so that all subsequent middleware
-	// and handlers see the correct request ID and client IP.
+	// RequestID must be first so every subsequent middleware and handler has a
+	// request ID available for correlation.
 	r.Use(middleware.RequestID)
+
+	// OWASP A01: per-IP rate limiting applied before RealIP so the limiter
+	// always uses the true TCP-level RemoteAddr and cannot be bypassed by
+	// rotating X-Forwarded-For / X-Real-IP headers.
+	//
+	// Read RATE_LIMIT_RPM from the environment (default 60). Set to 0 to
+	// disable rate limiting entirely (useful for JMeter load tests).
+	rpm, rpmErr := strconv.Atoi(envOr("RATE_LIMIT_RPM", "60"))
+	if rpmErr != nil || rpm < 0 {
+		logger.Warn("invalid RATE_LIMIT_RPM value; defaulting to 60", "value", envOr("RATE_LIMIT_RPM", "60"))
+		rpm = 60
+	}
+	if rpm > 0 {
+		r.Use(httprate.LimitByIP(rpm, time.Minute))
+	}
+
+	// RealIP rewrites RemoteAddr from forwarding headers. It runs after the
+	// rate limiter so the limiter is not affected by client-controlled headers.
 	r.Use(middleware.RealIP)
 
 	// OWASP A05: set defensive HTTP response headers on every response.
@@ -73,12 +95,6 @@ func main() {
 	// OWASP A09: emit a structured log line for every request, including
 	// status code (for 4xx/5xx detection) and request ID for correlation.
 	r.Use(handler.RequestLogger(logger))
-
-	// OWASP A01: per-IP rate limiting — 60 requests per minute across all
-	// endpoints. Adjust via RATE_LIMIT_RPM if higher throughput is needed
-	// for JMeter runs (set to 0 to disable).
-	rpm := 60
-	r.Use(httprate.LimitByIP(rpm, time.Minute))
 
 	r.Use(middleware.Recoverer)
 
@@ -146,4 +162,37 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// dsnFromEnv builds a Postgres DSN from environment variables.
+//
+// If DATABASE_URL is set it is returned as-is (for backward compatibility with
+// direct binary runs where the caller has already composed the DSN).
+// Otherwise, the DSN is assembled from the individual POSTGRES_* variables
+// with proper URL encoding so that passwords containing characters reserved in
+// URIs (e.g. "/" from openssl rand -base64 output) are handled correctly.
+func dsnFromEnv() string {
+	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+		return dsn
+	}
+
+	user := os.Getenv("POSTGRES_USER")
+	password := os.Getenv("POSTGRES_PASSWORD")
+	host := envOr("POSTGRES_HOST", "localhost")
+	port := envOr("POSTGRES_PORT", "5432")
+	dbName := os.Getenv("POSTGRES_DB")
+
+	if user == "" || dbName == "" {
+		// Caller (main) checks for empty DSN and logs a warning before
+		// attempting to connect, so returning "" here is intentional.
+		return ""
+	}
+
+	u := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(user, password),
+		Host:   net.JoinHostPort(host, port),
+		Path:   "/" + dbName,
+	}
+	return u.String()
 }

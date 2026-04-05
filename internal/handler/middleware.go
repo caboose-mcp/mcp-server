@@ -4,6 +4,7 @@ package handler
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
@@ -40,9 +41,15 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 
 		// Restrictive CSP for an API that never intentionally serves HTML.
-		// If Swagger UI is mounted, its own assets are self-contained, so
-		// 'self' is sufficient for the script-src.
-		h.Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+		// The Swagger UI bootstrap relies on an inline <script> block and may
+		// load fonts, so routes under /swagger/ receive a relaxed policy that
+		// permits inline scripts and data: font sources; all other routes keep
+		// the strict policy. Both policies include font-src for consistency.
+		if strings.HasPrefix(r.URL.Path, "/swagger/") {
+			h.Set("Content-Security-Policy", "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self' data:")
+		} else {
+			h.Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'")
+		}
 
 		// Disable all browser feature APIs for responses from this origin.
 		h.Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
