@@ -26,6 +26,38 @@ describe("tool template creation", () => {
     expect(text).toContain("Summarize a repository");
   });
 
+  it("scaffolds types.ts alongside the new tool when it does not exist", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mcp-template-"));
+    const outputDir = path.join(root, "src", "tools");
+
+    await createToolTemplate(
+      { name: "my_tool", description: "A tool" },
+      [root],
+      outputDir
+    );
+
+    const typesText = await readFile(path.join(outputDir, "types.ts"), "utf8");
+    expect(typesText).toContain("ToolRegistrar");
+  });
+
+  it("does not overwrite an existing types.ts", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "mcp-template-"));
+    const outputDir = root;
+    await mkdir(outputDir, { recursive: true });
+    const typesPath = path.join(outputDir, "types.ts");
+    const original = "// existing types\n";
+    await import("node:fs/promises").then(({ writeFile }) => writeFile(typesPath, original));
+
+    await createToolTemplate(
+      { name: "another_tool", description: "Another tool" },
+      [root],
+      outputDir
+    );
+
+    const typesText = await readFile(typesPath, "utf8");
+    expect(typesText).toBe(original);
+  });
+
   it("rejects output paths outside allowed roots", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "mcp-template-"));
     const outside = await mkdtemp(path.join(tmpdir(), "mcp-outside-"));

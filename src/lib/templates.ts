@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { constants, mkdir, writeFile, access } from "node:fs/promises";
 import path from "node:path";
 
 import { assertOutputDirectory } from "./paths.js";
@@ -37,6 +37,8 @@ export async function createToolTemplate(
   const target = path.join(safeOutputDir, `${name}.ts`);
   const text = renderToolTemplate(name, input.description.trim());
   await writeFile(target, text, { flag: "wx" });
+
+  await scaffoldTypesIfAbsent(safeOutputDir);
 
   return { path: target, text };
 }
@@ -79,4 +81,18 @@ function toTitle(name: string): string {
     .split("_")
     .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
     .join(" ");
+}
+
+const TYPES_CONTENT = `import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+export type ToolRegistrar = (server: McpServer) => void;
+`;
+
+async function scaffoldTypesIfAbsent(dir: string): Promise<void> {
+  const typesPath = path.join(dir, "types.ts");
+  try {
+    await access(typesPath, constants.F_OK);
+  } catch {
+    await writeFile(typesPath, TYPES_CONTENT, { flag: "wx" });
+  }
 }

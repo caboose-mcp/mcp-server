@@ -106,19 +106,36 @@ export async function searchSkills(
     throw new Error("Query is required");
   }
 
-  const skills = await listSkills(roots);
   const results: SkillSearchResult[] = [];
-  for (const skill of skills) {
-    const content = await readFile(skill.path, "utf8");
-    const haystack = `${skill.name}\n${skill.description}\n${content}`.toLowerCase();
-    const index = haystack.indexOf(needle);
-    if (index === -1) {
+
+  for (const root of roots) {
+    const existingRoot = await existingDirectory(root.path);
+    if (!existingRoot) {
       continue;
     }
-
-    results.push({ skill, excerpt: makeExcerpt(content, needle) });
-    if (results.length >= limit) {
-      break;
+    for await (const skillPath of walkSkillFiles(existingRoot)) {
+      const content = await readFile(skillPath, "utf8");
+      const frontmatter = parseFrontmatter(content);
+      const name = frontmatter.fields.name || path.basename(path.dirname(skillPath));
+      const description = frontmatter.fields.description || "";
+      const haystack = `${name}\n${description}\n${content}`.toLowerCase();
+      if (haystack.indexOf(needle) === -1) {
+        continue;
+      }
+      results.push({
+        skill: {
+          name,
+          description,
+          path: skillPath,
+          directory: path.dirname(skillPath),
+          root: existingRoot,
+          rootLabel: root.label
+        },
+        excerpt: makeExcerpt(content, needle)
+      });
+      if (results.length >= limit) {
+        return results;
+      }
     }
   }
 
