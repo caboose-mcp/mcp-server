@@ -1,20 +1,22 @@
 [tools]
-golangci-lint = "2.11.4"
-lefthook = "2.1.4"
-go = "1.24.2"
+bun = "1.3.13"
 
-[tasks.swagger]
-description = "Generate Swagger docs from swag annotations"
-run = "swag init -g cmd/api/main.go -o cmd/api/docs"
+[tasks.dev]
+description = "Run the MCP server over stdio"
+run = "bun run dev"
 
 [tasks.build]
-description = "Build all binaries"
-run = "go build ./..."
+description = "Compile TypeScript"
+run = "bun run build"
 
 [tasks.test]
-description = "Run all tests"
-run = "go test ./..."
+description = "Run unit tests"
+run = "bun run test"
 
 [tasks.lint]
-description = "Run golangci-lint"
-run = "golangci-lint run ./..."
+description = "Run ESLint and Prettier checks"
+run = "bun run lint"
+
+[tasks.typecheck]
+description = "Type-check without emitting files"
+run = "bun run typecheck"
