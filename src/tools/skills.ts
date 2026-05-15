@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { getSkillRoots, getTemplateOutputRoots } from "../lib/config.js";
+import { defaultTemplateOutputDir, getSkillRoots, getTemplateOutputRoots } from "../lib/config.js";
 import { listSkills, readSkillFile, searchSkills } from "../lib/skills.js";
 import { createToolTemplate } from "../lib/templates.js";
 import type { ToolRegistrar } from "./types.js";
@@ -66,15 +66,15 @@ export const registerSkillTools: ToolRegistrar = (server) => {
     "tool_template_create",
     {
       title: "Create Tool Template",
-      description: "Create a starter TypeScript MCP tool module in an allowed output root.",
+      description: "Create a starter TypeScript MCP tool module in the configured tools directory.",
       inputSchema: {
         name: z.string().min(1).describe("snake_case tool name"),
-        description: z.string().min(1),
-        outputDir: z.string().min(1).describe("Directory where the tool .ts file should be written")
+        description: z.string().min(1)
       }
     },
-    async ({ name, description, outputDir }) => {
+    async ({ name, description }) => {
       const allowedRoots = await getTemplateOutputRoots();
+      const outputDir = defaultTemplateOutputDir();
       const result = await createToolTemplate({ name, description }, allowedRoots, outputDir);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
